@@ -16,6 +16,11 @@ if (!tlsVersion) {
   process.exit(1);
 }
 
+// PACKAGE_VERSION is the NuGet package version stamped into the platform-specific
+// project file. Defaults to TLS_CLIENT_VERSION when not set so existing CI runs
+// (which only set TLS_CLIENT_VERSION) keep working unchanged.
+const packageVersion = process.env.PACKAGE_VERSION || tlsVersion;
+
 const tlsClientLibrariesPath = path.join(
   basePath,
   'build',
@@ -56,6 +61,7 @@ const tlsClientRegex = new RegExp(
 console.log('Configuration:');
 console.log(`- Base path: ${basePath}`);
 console.log(`- TLS Version: ${tlsVersion}`);
+console.log(`- Package Version: ${packageVersion}`);
 console.log(`- Libraries path: ${tlsClientLibrariesPath}`);
 console.log(`- Native path: ${nativePath}`);
 console.log(`- Template path: ${nativeTemplatePath}`);
@@ -396,6 +402,8 @@ async function processLibraries() {
         arch: lib.arch,
 
         version: tlsVersion,
+
+        packageVersion,
 
         ext: lib.ext,
 
