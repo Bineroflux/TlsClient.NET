@@ -71,7 +71,30 @@ namespace TlsClient.Core.Models.Requests
         public string RequestUrl { get; set; } = string.Empty;
         public List<string>? HeaderOrder { get; set; } = new List<string>();
         public List<TlsClientCookie>? RequestCookies { get; set; } = null;
+        /// <summary>
+        /// Per-request timeout in milliseconds. Set at most one of
+        /// <see cref="TimeoutMilliseconds"/> and <see cref="TimeoutSeconds"/>: the native
+        /// side rejects a request that sets both to non-zero values. Semantics:
+        /// <list type="bullet">
+        /// <item><description><c>null</c> — filled from <see cref="Entities.TlsClientOptions.Timeout"/> (60 s by default).</description></item>
+        /// <item><description><c>0</c> — the native default (30 s).</description></item>
+        /// <item><description><c>&gt; 0</c> — explicit deadline applied to the whole request, including body reads.</description></item>
+        /// <item><description><c>&lt; 0</c> — disables the deadline entirely. Required for long-lived SSE / streaming responses.</description></item>
+        /// </list>
+        /// When forwarded from <see cref="Entities.TlsClientOptions.Timeout"/>,
+        /// <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> serializes to <c>-1</c> here.
+        /// The timeout of a native session is fixed by the session's first request; on later
+        /// requests of the same client this value has no effect.
+        /// </summary>
         public int? TimeoutMilliseconds { get; set; } = null;
+
+        /// <summary>
+        /// Per-request timeout in seconds, as an alternative to
+        /// <see cref="TimeoutMilliseconds"/> (set at most one of the two). Same semantics:
+        /// 0 = native default, positive = deadline, negative = disabled; like
+        /// <see cref="TimeoutMilliseconds"/> it only takes effect on the first request of a
+        /// session.
+        /// </summary>
         public int? TimeoutSeconds { get; set; } = null;
         public bool? CatchPanics { get; set; } = null;
         public bool? FollowRedirects { get; set; } = null;
