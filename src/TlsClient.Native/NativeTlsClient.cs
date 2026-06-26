@@ -28,8 +28,8 @@ namespace TlsClient.Native
 
             try
             {
-                var payload = RequestHelpers.Prepare(request);
-                var rawResponse = TlsClientWrapper.Request(payload);
+                using var payload = RequestHelpers.PreparePooled(request);
+                var rawResponse = TlsClientWrapper.Request(payload.TerminatedSpan);
                 response = rawResponse.FromJson<Response>() ?? throw new Exception("Response is null, can't convert object from json.");
             }
             catch (Exception err)
@@ -57,21 +57,24 @@ namespace TlsClient.Native
         }
         public override GetCookiesFromSessionResponse GetCookies(string url)
         {
-            var payload = PrepareGetCookies(url);
-            var rawResponse = TlsClientWrapper.GetCookiesFromSession(RequestHelpers.Prepare(payload));
+            var input = PrepareGetCookies(url);
+            using var payload = RequestHelpers.PreparePooled(input);
+            var rawResponse = TlsClientWrapper.GetCookiesFromSession(payload.TerminatedSpan);
             
             return rawResponse.FromJson<GetCookiesFromSessionResponse>() ?? throw new Exception("Response is null, can't convert object from json.");
         }
         public override GetCookiesFromSessionResponse AddCookies(string url, List<TlsClientCookie> cookies)
         {
-            var payload = PrepareAddCookies(url, cookies);
-            var rawResponse = TlsClientWrapper.AddCookiesToSession(RequestHelpers.Prepare(payload));
+            var input = PrepareAddCookies(url, cookies);
+            using var payload = RequestHelpers.PreparePooled(input);
+            var rawResponse = TlsClientWrapper.AddCookiesToSession(payload.TerminatedSpan);
             return rawResponse.FromJson<GetCookiesFromSessionResponse>() ?? throw new Exception("Response is null, can't convert object from json.");
         }
         public override DestroyResponse Destroy()
         {
-            var payload = PrepareDestroy();
-            var rawResponse = TlsClientWrapper.DestroySession(RequestHelpers.Prepare(payload));
+            var input = PrepareDestroy();
+            using var payload = RequestHelpers.PreparePooled(input);
+            var rawResponse = TlsClientWrapper.DestroySession(payload.TerminatedSpan);
             return rawResponse.FromJson<DestroyResponse>() ?? throw new Exception("Response is null, can't convert object from json.");
         }
         public override DestroyResponse DestroyAll()
@@ -123,8 +126,8 @@ namespace TlsClient.Native
 
             try
             {
-                var payload = RequestHelpers.Prepare(request);
-                var rawResponse = TlsClientWrapper.RequestStream(payload);
+                using var payload = RequestHelpers.PreparePooled(request);
+                var rawResponse = TlsClientWrapper.RequestStream(payload.TerminatedSpan);
                 response = rawResponse.FromJson<StreamStartResponse>() ?? throw new Exception("Response is null, can't convert object from json.");
             }
             catch (Exception err)
@@ -160,12 +163,12 @@ namespace TlsClient.Native
 
             try
             {
-                var payload = RequestHelpers.Prepare(new ReadStreamRequest
+                using var payload = RequestHelpers.PreparePooled(new ReadStreamRequest
                 {
                     StreamId = streamId,
                     TimeoutMs = timeoutMs,
                 });
-                var rawResponse = TlsClientWrapper.ReadStream(payload);
+                var rawResponse = TlsClientWrapper.ReadStream(payload.TerminatedSpan);
                 response = rawResponse.FromJson<StreamChunkResponse>() ?? throw new Exception("Response is null, can't convert object from json.");
             }
             catch (Exception err)
@@ -197,8 +200,8 @@ namespace TlsClient.Native
 
             try
             {
-                var payload = RequestHelpers.Prepare(new ReadStreamAllRequest { StreamId = streamId });
-                var rawResponse = TlsClientWrapper.ReadStreamAll(payload);
+                using var payload = RequestHelpers.PreparePooled(new ReadStreamAllRequest { StreamId = streamId });
+                var rawResponse = TlsClientWrapper.ReadStreamAll(payload.TerminatedSpan);
                 response = rawResponse.FromJson<Response>() ?? throw new Exception("Response is null, can't convert object from json.");
             }
             catch (Exception err)
@@ -228,8 +231,8 @@ namespace TlsClient.Native
 
             try
             {
-                var payload = RequestHelpers.Prepare(new CancelStreamRequest { StreamId = streamId });
-                var rawResponse = TlsClientWrapper.CancelStream(payload);
+                using var payload = RequestHelpers.PreparePooled(new CancelStreamRequest { StreamId = streamId });
+                var rawResponse = TlsClientWrapper.CancelStream(payload.TerminatedSpan);
                 response = rawResponse.FromJson<DestroyResponse>() ?? throw new Exception("Response is null, can't convert object from json.");
             }
             catch (Exception err)

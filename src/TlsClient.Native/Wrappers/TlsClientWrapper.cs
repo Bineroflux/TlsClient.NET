@@ -1,57 +1,33 @@
-﻿using System;
+using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace TlsClient.Native.Wrappers
 {
-    public static class TlsClientWrapper
+    public static unsafe class TlsClientWrapper
     {
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate IntPtr RequestDelegate(byte[] payload);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate void FreeMemoryDelegate(string sessionID);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate IntPtr GetCookiesFromSessionDelegate(byte[] payload);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate IntPtr AddCookiesToSessionDelegate(byte[] payload);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate IntPtr DestroySessionDelegate(byte[] payload);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate IntPtr DestroyAllDelegate();
-
-        // Streaming exports (added in tls-client v1.11.2-stream)
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate IntPtr RequestStreamDelegate(byte[] payload);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate IntPtr ReadStreamDelegate(byte[] payload);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate IntPtr ReadStreamAllDelegate(byte[] payload);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate IntPtr CancelStreamDelegate(byte[] payload);
-
+        // The native cffi ABI is `char* fn(char* payload)` (see the cgo-generated header). Each
+        // export is bound as an unmanaged function pointer and the caller's payload span is pinned
+        // with `fixed` at the call site — no delegate marshalling thunk, no byte[] copy. The payload
+        // must be NUL-terminated: the Go side reads it with C.GoString (strlen-based);
+        // PooledJsonPayload appends that terminator.
         private static bool _isInitialized;
-
         private static IntPtr _module;
-        private static RequestDelegate _requestDelegate = null!;
-        private static FreeMemoryDelegate _freeMemoryDelegate = null!;
-        private static GetCookiesFromSessionDelegate _getCookiesFromSessionDelegate = null!;
-        private static AddCookiesToSessionDelegate _addCookiesToSessionDelegate = null!;
-        private static DestroySessionDelegate _destroySessionDelegate = null!;
-        private static DestroyAllDelegate _destroyAllDelegate = null!;
-        // Nullable: may remain null after Initialize when the loaded native library predates
-        // the streaming exports. RequireStreamingDelegate enforces non-null on first use.
-        private static RequestStreamDelegate? _requestStreamDelegate;
-        private static ReadStreamDelegate? _readStreamDelegate;
-        private static ReadStreamAllDelegate? _readStreamAllDelegate;
-        private static CancelStreamDelegate? _cancelStreamDelegate;
+
+        private static delegate* unmanaged[Cdecl]<byte*, byte*> _request;
+        private static delegate* unmanaged[Cdecl]<byte*, void> _freeMemory;
+        private static delegate* unmanaged[Cdecl]<byte*, byte*> _getCookiesFromSession;
+        private static delegate* unmanaged[Cdecl]<byte*, byte*> _addCookiesToSession;
+        private static delegate* unmanaged[Cdecl]<byte*, byte*> _destroySession;
+        private static delegate* unmanaged[Cdecl]<byte*> _destroyAll;
+
+        // Streaming exports. Stay null when the loaded library was built from a tls-client version
+        // without them; the streaming methods re-check and throw a clear error on first use.
+        private static delegate* unmanaged[Cdecl]<byte*, byte*> _requestStream;
+        private static delegate* unmanaged[Cdecl]<byte*, byte*> _readStream;
+        private static delegate* unmanaged[Cdecl]<byte*, byte*> _readStreamAll;
+        private static delegate* unmanaged[Cdecl]<byte*, byte*> _cancelStream;
 
         public static void Initialize(string? libraryPath = null)
         {
@@ -64,20 +40,20 @@ namespace TlsClient.Native.Wrappers
             if (_module == IntPtr.Zero)
                 throw new DllNotFoundException($"Failed to load native library: {libraryPath}");
 
-            _requestDelegate = GetDelegate<RequestDelegate>("request");
-            _freeMemoryDelegate = GetDelegate<FreeMemoryDelegate>("freeMemory");
-            _getCookiesFromSessionDelegate = GetDelegate<GetCookiesFromSessionDelegate>("getCookiesFromSession");
-            _addCookiesToSessionDelegate = GetDelegate<AddCookiesToSessionDelegate>("addCookiesToSession");
-            _destroySessionDelegate = GetDelegate<DestroySessionDelegate>("destroySession");
-            _destroyAllDelegate = GetDelegate<DestroyAllDelegate>("destroyAll");
+            _request = (delegate* unmanaged[Cdecl]<byte*, byte*>)GetExport("request");
+            _freeMemory = (delegate* unmanaged[Cdecl]<byte*, void>)GetExport("freeMemory");
+            _getCookiesFromSession = (delegate* unmanaged[Cdecl]<byte*, byte*>)GetExport("getCookiesFromSession");
+            _addCookiesToSession = (delegate* unmanaged[Cdecl]<byte*, byte*>)GetExport("addCookiesToSession");
+            _destroySession = (delegate* unmanaged[Cdecl]<byte*, byte*>)GetExport("destroySession");
+            _destroyAll = (delegate* unmanaged[Cdecl]<byte*>)GetExport("destroyAll");
 
-            // Streaming exports — optional. Older native libraries don't expose these,
-            // so the lookup is allowed to fail silently. The streaming wrapper methods
-            // re-check and throw a clearer error when actually invoked.
-            _requestStreamDelegate = TryGetDelegate<RequestStreamDelegate>("requestStream");
-            _readStreamDelegate = TryGetDelegate<ReadStreamDelegate>("readStream");
-            _readStreamAllDelegate = TryGetDelegate<ReadStreamAllDelegate>("readStreamAll");
-            _cancelStreamDelegate = TryGetDelegate<CancelStreamDelegate>("cancelStream");
+            // Streaming exports — optional. Older native libraries don't expose these, so the
+            // lookup is allowed to fail silently (TryGetExport → null). The streaming wrapper
+            // methods re-check and throw a clearer error when actually invoked.
+            _requestStream = (delegate* unmanaged[Cdecl]<byte*, byte*>)TryGetExport("requestStream");
+            _readStream = (delegate* unmanaged[Cdecl]<byte*, byte*>)TryGetExport("readStream");
+            _readStreamAll = (delegate* unmanaged[Cdecl]<byte*, byte*>)TryGetExport("readStreamAll");
+            _cancelStream = (delegate* unmanaged[Cdecl]<byte*, byte*>)TryGetExport("cancelStream");
 
             _isInitialized = true;
         }
@@ -89,49 +65,68 @@ namespace TlsClient.Native.Wrappers
                 throw new InvalidOperationException("TlsClientStaticWrapper not initialized. Call Initialize(string libraryPath) first.");
         }
 
-        private static T GetDelegate<T>(string functionName) where T : Delegate
+        private static void* GetExport(string functionName)
         {
             var functionPtr = NativeLoader.GetProcAddress(_module, functionName);
             if (functionPtr == IntPtr.Zero)
                 throw new EntryPointNotFoundException($"Failed to get address of native function '{functionName}'.");
 
-            return Marshal.GetDelegateForFunctionPointer<T>(functionPtr);
+            return (void*)functionPtr;
         }
 
-        private static T? TryGetDelegate<T>(string functionName) where T : Delegate
-        {
-            var functionPtr = NativeLoader.GetProcAddress(_module, functionName);
-            if (functionPtr == IntPtr.Zero)
-                return null;
+        // Returns null when the export is absent (used for the optional streaming functions).
+        private static void* TryGetExport(string functionName)
+            => (void*)NativeLoader.GetProcAddress(_module, functionName);
 
-            return Marshal.GetDelegateForFunctionPointer<T>(functionPtr);
-        }
+        private static EntryPointNotFoundException StreamingNotSupported(string functionName)
+            => new EntryPointNotFoundException(
+                $"Native function '{functionName}' is not exported by the loaded tls-client library. " +
+                "Streaming requires a native library built with the streaming exports (requestStream, " +
+                "readStream, readStreamAll, cancelStream). Update your native library.");
 
-        private static T RequireStreamingDelegate<T>(T? del, string functionName) where T : Delegate
+        // Copies the native-returned C string into a managed string. The native memory itself is
+        // released separately via freeMemory(responseId) by the caller (see NativeTlsClient).
+        private static string Decode(byte* result)
         {
-            if (del is null)
-                throw new EntryPointNotFoundException(
-                    $"Native function '{functionName}' is not exported by the loaded tls-client library. " +
-                    "Streaming requires a native library built with the streaming exports (requestStream, " +
-                    "readStream, readStreamAll, cancelStream). Update your native library.");
-            return del;
-        }
-
-        private static string ExecuteNative(Func<IntPtr> nativeCall)
-        {
-            var ptr = nativeCall();
-            if (ptr == IntPtr.Zero)
+            if (result is null)
                 throw new InvalidOperationException("Native method returned a null pointer.");
 
-            return Marshal.PtrToStringUTF8(ptr) ?? throw new InvalidOperationException("Failed to convert UTF-8 string from native pointer.");
+            return Marshal.PtrToStringUTF8((IntPtr)result)
+                ?? throw new InvalidOperationException("Failed to convert UTF-8 string from native pointer.");
         }
 
-        public static string Request(byte[] payload)
+        // The native side reads the payload with C.GoString (strlen), so without a trailing NUL it
+        // would read past the end of the buffer. Reject such payloads instead of handing them over.
+        private static void EnsureNulTerminated(ReadOnlySpan<byte> payload)
+        {
+            if (payload.IsEmpty || payload[payload.Length - 1] != 0)
+                throw new ArgumentException(
+                    "The payload must be NUL-terminated UTF-8 JSON, e.g. RequestHelpers.PreparePooled(...).TerminatedSpan.",
+                    nameof(payload));
+        }
+
+        // Compatibility for callers of the former byte[] overloads: appends the NUL terminator
+        // when it is missing (by copying the payload).
+        private static byte[] WithNulTerminator(byte[] payload)
+        {
+            if (payload is null) throw new ArgumentNullException(nameof(payload));
+            if (payload.Length > 0 && payload[payload.Length - 1] == 0) return payload;
+
+            var terminated = new byte[payload.Length + 1];
+            Buffer.BlockCopy(payload, 0, terminated, 0, payload.Length);
+            return terminated;
+        }
+
+        public static string Request(ReadOnlySpan<byte> payload)
         {
             EnsureInitialized();
-            if (payload is null) throw new ArgumentNullException(nameof(payload));
-            return ExecuteNative(() => _requestDelegate(payload));
+            EnsureNulTerminated(payload);
+            fixed (byte* p = payload)
+                return Decode(_request(p));
         }
+
+        /// <summary>Compatibility overload; appends the NUL terminator when it is missing.</summary>
+        public static string Request(byte[] payload) => Request(new ReadOnlySpan<byte>(WithNulTerminator(payload)));
 
         public static void FreeMemory(string sessionId)
         {
@@ -139,66 +134,89 @@ namespace TlsClient.Native.Wrappers
             if (string.IsNullOrWhiteSpace(sessionId))
                 throw new ArgumentException("sessionId cannot be null or empty.", nameof(sessionId));
 
-            _freeMemoryDelegate(sessionId);
+            // freeMemory(char* id) also reads via C.GoString, so the id needs a NUL terminator.
+            // Response ids are short ASCII GUIDs, so encode into a stack buffer to stay alloc-free.
+            int max = Encoding.UTF8.GetMaxByteCount(sessionId.Length) + 1;
+            Span<byte> buffer = max <= 256 ? stackalloc byte[256] : new byte[max];
+            int written = Encoding.UTF8.GetBytes(sessionId, buffer);
+            buffer[written] = 0;
+            fixed (byte* p = buffer)
+                _freeMemory(p);
         }
 
-        public static string GetCookiesFromSession(byte[] payload)
+        public static string GetCookiesFromSession(ReadOnlySpan<byte> payload)
         {
             EnsureInitialized();
-            if (payload is null) throw new ArgumentNullException(nameof(payload));
-            return ExecuteNative(() => _getCookiesFromSessionDelegate(payload));
+            EnsureNulTerminated(payload);
+            fixed (byte* p = payload)
+                return Decode(_getCookiesFromSession(p));
         }
 
-        public static string AddCookiesToSession(byte[] payload)
+        /// <summary>Compatibility overload; appends the NUL terminator when it is missing.</summary>
+        public static string GetCookiesFromSession(byte[] payload) => GetCookiesFromSession(new ReadOnlySpan<byte>(WithNulTerminator(payload)));
+
+        public static string AddCookiesToSession(ReadOnlySpan<byte> payload)
         {
             EnsureInitialized();
-            if (payload is null) throw new ArgumentNullException(nameof(payload));
-            return ExecuteNative(() => _addCookiesToSessionDelegate(payload));
+            EnsureNulTerminated(payload);
+            fixed (byte* p = payload)
+                return Decode(_addCookiesToSession(p));
         }
 
-        public static string DestroySession(byte[] payload)
+        /// <summary>Compatibility overload; appends the NUL terminator when it is missing.</summary>
+        public static string AddCookiesToSession(byte[] payload) => AddCookiesToSession(new ReadOnlySpan<byte>(WithNulTerminator(payload)));
+
+        public static string DestroySession(ReadOnlySpan<byte> payload)
         {
             EnsureInitialized();
-            if (payload is null) throw new ArgumentNullException(nameof(payload));
-            return ExecuteNative(() => _destroySessionDelegate(payload));
+            EnsureNulTerminated(payload);
+            fixed (byte* p = payload)
+                return Decode(_destroySession(p));
         }
+
+        /// <summary>Compatibility overload; appends the NUL terminator when it is missing.</summary>
+        public static string DestroySession(byte[] payload) => DestroySession(new ReadOnlySpan<byte>(WithNulTerminator(payload)));
 
         public static string DestroyAll()
         {
             EnsureInitialized();
-            return ExecuteNative(() => _destroyAllDelegate());
+            return Decode(_destroyAll());
         }
 
-        public static string RequestStream(byte[] payload)
+        public static string RequestStream(ReadOnlySpan<byte> payload)
         {
             EnsureInitialized();
-            if (payload is null) throw new ArgumentNullException(nameof(payload));
-            var del = RequireStreamingDelegate(_requestStreamDelegate, "requestStream");
-            return ExecuteNative(() => del(payload));
+            if (_requestStream == null) throw StreamingNotSupported("requestStream");
+            EnsureNulTerminated(payload);
+            fixed (byte* p = payload)
+                return Decode(_requestStream(p));
         }
 
-        public static string ReadStream(byte[] payload)
+        public static string ReadStream(ReadOnlySpan<byte> payload)
         {
             EnsureInitialized();
-            if (payload is null) throw new ArgumentNullException(nameof(payload));
-            var del = RequireStreamingDelegate(_readStreamDelegate, "readStream");
-            return ExecuteNative(() => del(payload));
+            if (_readStream == null) throw StreamingNotSupported("readStream");
+            EnsureNulTerminated(payload);
+            fixed (byte* p = payload)
+                return Decode(_readStream(p));
         }
 
-        public static string ReadStreamAll(byte[] payload)
+        public static string ReadStreamAll(ReadOnlySpan<byte> payload)
         {
             EnsureInitialized();
-            if (payload is null) throw new ArgumentNullException(nameof(payload));
-            var del = RequireStreamingDelegate(_readStreamAllDelegate, "readStreamAll");
-            return ExecuteNative(() => del(payload));
+            if (_readStreamAll == null) throw StreamingNotSupported("readStreamAll");
+            EnsureNulTerminated(payload);
+            fixed (byte* p = payload)
+                return Decode(_readStreamAll(p));
         }
 
-        public static string CancelStream(byte[] payload)
+        public static string CancelStream(ReadOnlySpan<byte> payload)
         {
             EnsureInitialized();
-            if (payload is null) throw new ArgumentNullException(nameof(payload));
-            var del = RequireStreamingDelegate(_cancelStreamDelegate, "cancelStream");
-            return ExecuteNative(() => del(payload));
+            if (_cancelStream == null) throw StreamingNotSupported("cancelStream");
+            EnsureNulTerminated(payload);
+            fixed (byte* p = payload)
+                return Decode(_cancelStream(p));
         }
 
         /// <summary>
@@ -212,12 +230,13 @@ namespace TlsClient.Native.Wrappers
             get
             {
                 EnsureInitialized();
-                return _requestStreamDelegate != null
-                    && _readStreamDelegate != null
-                    && _readStreamAllDelegate != null
-                    && _cancelStreamDelegate != null;
+                return _requestStream != null
+                    && _readStream != null
+                    && _readStreamAll != null
+                    && _cancelStream != null;
             }
         }
+
         public static void Destroy()
         {
             if (!_isInitialized)
@@ -235,16 +254,16 @@ namespace TlsClient.Native.Wrappers
             }
             finally
             {
-                _requestDelegate = null!;
-                _freeMemoryDelegate = null!;
-                _getCookiesFromSessionDelegate = null!;
-                _addCookiesToSessionDelegate = null!;
-                _destroySessionDelegate = null!;
-                _destroyAllDelegate = null!;
-                _requestStreamDelegate = null;
-                _readStreamDelegate = null;
-                _readStreamAllDelegate = null;
-                _cancelStreamDelegate = null;
+                _request = null;
+                _freeMemory = null;
+                _getCookiesFromSession = null;
+                _addCookiesToSession = null;
+                _destroySession = null;
+                _destroyAll = null;
+                _requestStream = null;
+                _readStream = null;
+                _readStreamAll = null;
+                _cancelStream = null;
 
                 _module = IntPtr.Zero;
 
