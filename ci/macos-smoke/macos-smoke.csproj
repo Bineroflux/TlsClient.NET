@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Consumer smoke test for the macOS platform package, run by the build-darwin
+    workflow of the tls-client fork after it packed TlsClient.Core,
+    TlsClient.Native and TlsClient.Native.darwin-arm64 into ../../feed.
+    NativeTlsClient.Initialize(null) must find runtimes/osx-arm64/native/tls-client.dylib
+    on its own. Not part of TlsClient.sln.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <IsPackable>false</IsPackable>
+    <TlsClientPackageVersion Condition="'$(TlsClientPackageVersion)' == ''">1.3.0-stream.1</TlsClientPackageVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TlsClient.Native" Version="$(TlsClientPackageVersion)" />
+    <PackageReference Include="TlsClient.Native.darwin-arm64" Version="$(TlsClientPackageVersion)" />
+  </ItemGroup>
+
+</Project>
