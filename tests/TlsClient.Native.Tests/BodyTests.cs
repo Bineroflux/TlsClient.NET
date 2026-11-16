@@ -16,7 +16,7 @@ namespace TlsClient.Core.Tests
     {
         static BodyTests()
         {
-            NativeTlsClient.Initialize("D:\\Tools\\tls-client-windows-64-1.15.1.dll");
+            NativeTlsClient.Initialize(NativeTestSetup.DllPath);
         }
 
         [Fact]
