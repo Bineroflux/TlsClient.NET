@@ -49,12 +49,14 @@ dotnet add package TlsClient.Native
 | -------------- | ----- | ------------------------------------- |
 | Windows        | x64   | `TlsClient.Native.win-x64`            |
 | Windows        | x86   | `TlsClient.Native.win-x32`            |
-| Linux (Ubuntu) | amd64 | `TlsClient.Native.linux-ubuntu-amd64` |
+| Linux          | amd64 | `TlsClient.Native.linux-amd64` (up to 1.15.1: `TlsClient.Native.linux-ubuntu-amd64`) |
 | Linux          | arm64 | `TlsClient.Native.linux-arm64`        |
 | Linux          | armv7 | `TlsClient.Native.linux-armv7`        |
 | Linux (Alpine) | amd64 | `TlsClient.Native.linux-alpine-amd64` |
 | macOS (Apple)  | arm64 | `TlsClient.Native.darwin-arm64`       |
 | macOS (Intel)  | amd64 | `TlsClient.Native.darwin-amd64`       |
+
+To run one build on several operating systems, reference one platform package per OS, e.g. `TlsClient.Native.win-x64` and `TlsClient.Native.linux-amd64`. A portable (framework-dependent, no RID) build then contains `runtimes/win-x64/native/tls-client.dll` and `runtimes/linux-x64/native/tls-client.so`, and `NativeTlsClient.Initialize(null)` loads the one for the OS the app runs on. A RID-specific publish (`dotnet publish -r linux-x64`) copies only the matching library next to the app.
 
 3. Initialize once at startup:
 
