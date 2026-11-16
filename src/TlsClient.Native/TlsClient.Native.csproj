@@ -1,13 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>netstandard2.1</TargetFramework>
+		<TargetFramework>net8.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<Title>TlsClient.Native</Title>
 		<Authors>ErenKrt</Authors>
 		<Version>1.2.0-stream.1</Version>
 		<PackageProjectUrl>https://github.com/ErenKrt/TlsClient.NET</PackageProjectUrl>
-		<Description>TlsClient.Native is a .NET Standard library that provides direct/native bindings to the TlsClient Go library.</Description>
+		<Description>TlsClient.Native provides direct/native bindings to the TlsClient Go library. Requires .NET 8 or later.</Description>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<PackageLicenseFile>LICENSE</PackageLicenseFile>
 	</PropertyGroup>
@@ -19,6 +19,10 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\TlsClient.Core\TlsClient.Core.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="TlsClient.Native.Tests" />
 	</ItemGroup>
 
 </Project>

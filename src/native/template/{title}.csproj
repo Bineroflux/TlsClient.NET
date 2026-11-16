@@ -7,13 +7,23 @@
         <Version>{packageVersion}</Version>
         <PackageProjectUrl>https://github.com/ErenKrt/TlsClient.NET</PackageProjectUrl>
         <Description>Native client of TLSClient for {os} {arch}</Description>
+        <!--
+          Suppress NU5128: this is a native-asset-only package and intentionally
+          ships no managed lib/. The SDK auto-handles the runtimes/<rid>/native/
+          payload for both build and publish.
+        -->
+        <NoWarn>$(NoWarn);NU5128</NoWarn>
     </PropertyGroup>
 
-
     <ItemGroup>
-        <None Include="runtimes\tls-client\{os}\{arch}\tls-client.{ext}" Pack="true"
-            PackagePath="runtimes\tls-client\{os}\{arch}" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="buildTransitive\{title}.targets" Pack="true" PackagePath="buildTransitive\" />
+        <!--
+          Standard NuGet native runtime asset layout: runtimes/<rid>/native/<file>.
+          With this layout, the SDK propagates the binary to the consumer's build
+          and publish output automatically — no buildTransitive/.targets needed.
+        -->
+        <None Include="runtimes\{runtimeIdentifier}\native\tls-client.{ext}"
+              Pack="true"
+              PackagePath="runtimes\{runtimeIdentifier}\native\" />
     </ItemGroup>
 
 </Project>

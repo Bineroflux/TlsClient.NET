@@ -418,22 +418,17 @@ async function processLibraries() {
       );
 
       /*
-       * IMPORTANT:
-       *
-       * Keep the existing CycleTLS.NET NuGet layout:
-       *
-       * runtimes/
-       *   tls-client/
-       *     {platform}/
-       *       {arch}/
-       *         tls-client.{ext}
+       * Place the native binary at the standard NuGet native asset
+       * path runtimes/<rid>/native/ so the SDK propagates it to the
+       * consumer's build and publish output by itself. No
+       * buildTransitive/.targets file is needed. The package name
+       * (TlsClient.Native.<os>-<arch>) stays as it was.
        */
       const runtimesPath = path.join(
         targetDir,
         'runtimes',
-        'tls-client',
-        lib.os,
-        lib.arch
+        lib.runtimeIdentifier,
+        'native'
       );
 
       await fsPromises.mkdir(
@@ -461,7 +456,7 @@ async function processLibraries() {
       );
 
       console.log(
-        `  -> runtimes/tls-client/${lib.os}/${lib.arch}/${destFileName}`
+        `  -> runtimes/${lib.runtimeIdentifier}/native/${destFileName}`
       );
     }
 

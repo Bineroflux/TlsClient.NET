@@ -374,9 +374,13 @@ FodyWeavers.xsd
 #   local-nuget/                               — output of local `dotnet pack` runs
 #                                                used to consume the wrapper from
 #                                                another solution as a local feed
-#   /runtimes/                                 — ad-hoc DLL staging at the repo root
-#                                                (e.g. for NativeLoader.GetLibraryPath()
-#                                                default lookup during local debugging)
+#   /runtimes/                                 — legacy ad-hoc DLL staging at the
+#                                                repo root, retained as ignored so
+#                                                old working trees stay clean. The
+#                                                modern loader probes
+#                                                <BaseDir>/runtimes/<rid>/native/
+#                                                inside consumer build output, so
+#                                                this directory is no longer used.
 /src/native/TlsClient.Native.*/
 /build/temp/
 /local-nuget/

@@ -65,6 +65,9 @@ NativeTlsClient.Initialize("{PATH_TO_NATIVE_LIBRARY}");
 // e.g. "C:\\tools\\tls-client\\tls-client-windows-64-1.11.0.dll"
 ```
 
+> `TlsClient.Native` requires **.NET 8 or later**.
+> A relative path passed to `Initialize` is resolved against the current directory. With a platform package referenced, `NativeTlsClient.Initialize(null)` finds the bundled library on its own: the platform packages ship it at the standard `runtimes/<rid>/native/` location, so it also ends up in `dotnet publish` output. Platform packages in the former `runtimes/tls-client/<os>/<arch>/` layout are still found; older versions of `TlsClient.Native` itself, however, do not find the library in platform packages with the new layout.
+
 > ⚠️ Without `NativeTlsClient.Initialize(...)`, native mode won’t work.
 
 **Interop note (important):** C# calling into the Go native library can be less stable on some systems (especially under heavy concurrency). If you encounter flakiness (random SIG… signals, heap issues, or unexplained timeouts), switch to `TlsClient.Api`.
