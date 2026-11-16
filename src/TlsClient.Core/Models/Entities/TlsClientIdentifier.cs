@@ -70,7 +70,13 @@
         public static readonly TlsClientIdentifier Firefox146Psk = new TlsClientIdentifier("firefox_146_PSK");
         public static readonly TlsClientIdentifier Firefox147 = new TlsClientIdentifier("firefox_147");
         public static readonly TlsClientIdentifier Firefox147Psk = new TlsClientIdentifier("firefox_147_PSK");
-        public static readonly TlsClientIdentifier Firefox148Psk = new TlsClientIdentifier("firefox_148_PSK");
+        public static readonly TlsClientIdentifier Firefox148 = new TlsClientIdentifier("firefox_148");
+        /// <summary>
+        /// tls-client removed the <c>firefox_148_PSK</c> profile; kept so existing code still
+        /// compiles and gets the Firefox 148 profile instead of a silent fallback to Chrome.
+        /// </summary>
+        [System.Obsolete("tls-client removed the firefox_148_PSK profile; use Firefox148.")]
+        public static readonly TlsClientIdentifier Firefox148Psk = Firefox148;
         #endregion
 
         #region Opera Profiles
