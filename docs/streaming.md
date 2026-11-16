@@ -227,9 +227,15 @@ Extends `Response` with one extra field: `Guid StreamId`. `Body` is always empty
 
 ## 🧯 Troubleshooting
 
+The `http2 ...` messages need a native library built from a tls-client version that classifies HTTP/2 read errors. Older libraries only report the raw `stream error: stream ID N; INTERNAL_ERROR` text, which does not say which side ended the stream. The raw text is always kept at the end of the message. The same texts also appear in `Response.Body` (with `Status = 0`) when `ReadStreamAll` or a plain `Request()` fails while reading the body.
+
 | Symptom                                      | Likely cause                                                                                  |
 | -------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `EntryPointNotFoundException: requestStream` | The loaded native library predates the streaming exports. Use a v1.11.2-stream or later DLL. |
+| `EntryPointNotFoundException: requestStream` | The loaded native library was built without the streaming exports. Use a library built from a tls-client version that has them. |
 | Stream ends after exactly 60 s (or 30 s)     | The deadline of `TlsClientOptions.Timeout` (60 s by default; the native 30 s default when it is `TimeSpan.Zero`) covers the body read. Set `TlsClientOptions.Timeout = Timeout.InfiniteTimeSpan` on the client you stream with. A `Request.TimeoutMilliseconds = -1` on a single request only helps if it is the first request of that client's session. |
 | Endless `Timeout=true` heartbeats            | The remote side hasn't flushed any bytes yet. Verify the endpoint actually streams.           |
 | `Error: unknown streamId`                    | You called `ReadStream` after `EOF` / `Error` / `CancelStream`. Stop the loop on those.       |
+| `Error: http2 stream reset by remote peer (RST_STREAM, code ...)` | The server, or a proxy / CDN in front of it, aborted this HTTP/2 stream (e.g. `INTERNAL_ERROR`, `CANCEL`). Nothing on the client side caused it; check the server logs or retry. |
+| `Error: http2 stream ended with PROTOCOL_ERROR and no further detail` | Either the server sent `RST_STREAM(PROTOCOL_ERROR)` or tls-client rejected a malformed frame from it; the HTTP/2 transport reports both cases the same way. |
+| `Error: http2 stream aborted by the local transport (code ...)` | tls-client rejected malformed data from the server, e.g. an invalid header field. The detail is at the end of the message. |
+| `Error: http2 connection closed by remote peer after GOAWAY` | The server closed the whole HTTP/2 connection, which ends every stream on it. Start a new request. |
