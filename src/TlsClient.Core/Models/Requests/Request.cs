@@ -76,7 +76,7 @@ namespace TlsClient.Core.Models.Requests
         /// <see cref="TimeoutMilliseconds"/> and <see cref="TimeoutSeconds"/>: the native
         /// side rejects a request that sets both to non-zero values. Semantics:
         /// <list type="bullet">
-        /// <item><description><c>null</c> — filled from <see cref="Entities.TlsClientOptions.Timeout"/> (60 s by default).</description></item>
+        /// <item><description><c>null</c> — filled from <see cref="Entities.TlsClientOptions.Timeout"/> (60 s by default), unless <see cref="TimeoutSeconds"/> is set.</description></item>
         /// <item><description><c>0</c> — the native default (30 s).</description></item>
         /// <item><description><c>&gt; 0</c> — explicit deadline applied to the whole request, including body reads.</description></item>
         /// <item><description><c>&lt; 0</c> — disables the deadline entirely. Required for long-lived SSE / streaming responses.</description></item>

@@ -49,7 +49,10 @@ namespace TlsClient.Core
 
             request.TlsClientIdentifier ??= Options.TlsClientIdentifier;
             request.SessionId ??= Options.SessionID;
-            request.TimeoutMilliseconds ??= (int)Options.Timeout.TotalMilliseconds;
+            // The native side rejects a request that sets both timeout fields, so a request that
+            // brings its own TimeoutSeconds must not get Options.Timeout as TimeoutMilliseconds.
+            if (request.TimeoutSeconds is null)
+                request.TimeoutMilliseconds ??= (int)Options.Timeout.TotalMilliseconds;
             request.ProxyUrl ??= Options.ProxyURL;
             request.IsRotatingProxy ??= Options.IsRotatingProxy;
             request.FollowRedirects ??= Options.FollowRedirects;
