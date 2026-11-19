@@ -90,6 +90,39 @@ namespace TlsClient.Core
 
             return request;
         }
+        internal WsConnectRequest PrepareWsConnect(WsConnectRequest request)
+        {
+            if (request is null) throw new ArgumentNullException(nameof(request));
+            if (string.IsNullOrWhiteSpace(request.Url))
+                throw new ArgumentException("Url cannot be null or empty.", nameof(request));
+
+            // SessionId is deliberately not taken from the options: the native side reuses a named
+            // session's client as it is, and one created by Request() negotiates HTTP/2, which fails a
+            // WebSocket handshake. Without it the native side builds an HTTP/1.1 client per connection.
+            if (request.SessionId == null &&
+                (request.TlsClientIdentifier == null && Options.TlsClientIdentifier == null) &&
+                (request.CustomTlsClient == null && Options.CustomTlsClient == null))
+                throw new ArgumentException("Either SessionId, TlsClientIdentifier or CustomTlsClient must be set in Options or in the request.");
+
+            request.TlsClientIdentifier ??= Options.TlsClientIdentifier;
+            request.CustomTlsClient ??= Options.CustomTlsClient;
+            if (request.CustomTlsClient != null)
+                request.TlsClientIdentifier = null;
+            request.ProxyUrl ??= Options.ProxyURL;
+            request.ServerNameOverwrite ??= Options.ServerNameOverwrite;
+            request.InsecureSkipVerify ??= Options.InsecureSkipVerify;
+            request.WithRandomTLSExtensionOrder ??= Options.WithRandomTLSExtensionOrder;
+            request.DisableIPV4 ??= Options.DisableIPV4;
+            request.DisableIPV6 ??= Options.DisableIPV6;
+            request.HeaderOrder ??= Options.HeaderOrder;
+            request.Headers ??= new Dictionary<string, string>();
+
+            foreach (var header in Options.DefaultHeaders)
+                if (!request.Headers.ContainsKey(header.Key) && header.Value != null && header.Value.Count > 0)
+                    request.Headers.Add(header.Key, header.Value[0]);
+
+            return request;
+        }
         internal AddCookiesToSessionRequest PrepareAddCookies(string url, List<TlsClientCookie> cookies)
         {
             if (string.IsNullOrEmpty(url))

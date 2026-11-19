@@ -29,6 +29,14 @@ namespace TlsClient.Native.Wrappers
         private static delegate* unmanaged[Cdecl]<byte*, byte*> _readStreamAll;
         private static delegate* unmanaged[Cdecl]<byte*, byte*> _cancelStream;
 
+        // WebSocket exports (tls-client's cffi_src/websocket.go). Optional for the same reason as
+        // the streaming ones: null when the loaded library predates them.
+        private static delegate* unmanaged[Cdecl]<byte*, byte*> _wsConnect;
+        private static delegate* unmanaged[Cdecl]<byte*, byte*> _wsRead;
+        private static delegate* unmanaged[Cdecl]<byte*, byte*> _wsWrite;
+        private static delegate* unmanaged[Cdecl]<byte*, byte*> _wsClose;
+        private static delegate* unmanaged[Cdecl]<byte*, byte*> _wsStats;
+
         public static void Initialize(string? libraryPath = null)
         {
             if (_isInitialized) return;
@@ -54,6 +62,12 @@ namespace TlsClient.Native.Wrappers
             _readStream = (delegate* unmanaged[Cdecl]<byte*, byte*>)TryGetExport("readStream");
             _readStreamAll = (delegate* unmanaged[Cdecl]<byte*, byte*>)TryGetExport("readStreamAll");
             _cancelStream = (delegate* unmanaged[Cdecl]<byte*, byte*>)TryGetExport("cancelStream");
+
+            _wsConnect = (delegate* unmanaged[Cdecl]<byte*, byte*>)TryGetExport("wsConnect");
+            _wsRead = (delegate* unmanaged[Cdecl]<byte*, byte*>)TryGetExport("wsRead");
+            _wsWrite = (delegate* unmanaged[Cdecl]<byte*, byte*>)TryGetExport("wsWrite");
+            _wsClose = (delegate* unmanaged[Cdecl]<byte*, byte*>)TryGetExport("wsClose");
+            _wsStats = (delegate* unmanaged[Cdecl]<byte*, byte*>)TryGetExport("wsStats");
 
             _isInitialized = true;
         }
@@ -83,6 +97,12 @@ namespace TlsClient.Native.Wrappers
                 $"Native function '{functionName}' is not exported by the loaded tls-client library. " +
                 "Streaming requires a native library built with the streaming exports (requestStream, " +
                 "readStream, readStreamAll, cancelStream). Update your native library.");
+
+        private static EntryPointNotFoundException WebSocketNotSupported(string functionName)
+            => new EntryPointNotFoundException(
+                $"Native function '{functionName}' is not exported by the loaded tls-client library. " +
+                "WebSockets require a native library built with the WebSocket exports (wsConnect, " +
+                "wsRead, wsWrite, wsClose, wsStats). Update your native library.");
 
         // Copies the native-returned C string into a managed string. The native memory itself is
         // released separately via freeMemory(responseId) by the caller (see NativeTlsClient).
@@ -219,6 +239,69 @@ namespace TlsClient.Native.Wrappers
                 return Decode(_cancelStream(p));
         }
 
+        public static string WsConnect(ReadOnlySpan<byte> payload)
+        {
+            EnsureInitialized();
+            if (_wsConnect == null) throw WebSocketNotSupported("wsConnect");
+            EnsureNulTerminated(payload);
+            fixed (byte* p = payload)
+                return Decode(_wsConnect(p));
+        }
+
+        public static string WsRead(ReadOnlySpan<byte> payload)
+        {
+            EnsureInitialized();
+            if (_wsRead == null) throw WebSocketNotSupported("wsRead");
+            EnsureNulTerminated(payload);
+            fixed (byte* p = payload)
+                return Decode(_wsRead(p));
+        }
+
+        public static string WsWrite(ReadOnlySpan<byte> payload)
+        {
+            EnsureInitialized();
+            if (_wsWrite == null) throw WebSocketNotSupported("wsWrite");
+            EnsureNulTerminated(payload);
+            fixed (byte* p = payload)
+                return Decode(_wsWrite(p));
+        }
+
+        public static string WsClose(ReadOnlySpan<byte> payload)
+        {
+            EnsureInitialized();
+            if (_wsClose == null) throw WebSocketNotSupported("wsClose");
+            EnsureNulTerminated(payload);
+            fixed (byte* p = payload)
+                return Decode(_wsClose(p));
+        }
+
+        public static string WsStats(ReadOnlySpan<byte> payload)
+        {
+            EnsureInitialized();
+            if (_wsStats == null) throw WebSocketNotSupported("wsStats");
+            EnsureNulTerminated(payload);
+            fixed (byte* p = payload)
+                return Decode(_wsStats(p));
+        }
+
+        /// <summary>
+        /// True when the loaded native library exposes the WebSocket exports (<c>wsConnect</c>,
+        /// <c>wsRead</c>, <c>wsWrite</c>, <c>wsClose</c>, <c>wsStats</c>). Without them the WebSocket
+        /// methods on <see cref="TlsClient.Native.NativeTlsClient"/> throw on first use.
+        /// </summary>
+        public static bool IsWebSocketSupported
+        {
+            get
+            {
+                EnsureInitialized();
+                return _wsConnect != null
+                    && _wsRead != null
+                    && _wsWrite != null
+                    && _wsClose != null
+                    && _wsStats != null;
+            }
+        }
+
         /// <summary>
         /// True when the loaded native library exposes the streaming exports
         /// (<c>requestStream</c>, <c>readStream</c>, <c>readStreamAll</c>, <c>cancelStream</c>).
@@ -264,6 +347,11 @@ namespace TlsClient.Native.Wrappers
                 _readStream = null;
                 _readStreamAll = null;
                 _cancelStream = null;
+                _wsConnect = null;
+                _wsRead = null;
+                _wsWrite = null;
+                _wsClose = null;
+                _wsStats = null;
 
                 _module = IntPtr.Zero;
 

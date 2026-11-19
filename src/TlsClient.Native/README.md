@@ -68,6 +68,24 @@ public sealed class NativeTlsClient : BaseTlsClient
     public override Task<GetCookiesFromSessionResponse> AddCookiesAsync(string url, List<TlsClientCookie> cookies, CancellationToken ct = default);
     public override Task<DestroyResponse> DestroyAsync(CancellationToken ct = default);
     public override Task<DestroyResponse> DestroyAllAsync(CancellationToken ct = default);
+
+    // Streaming (see docs/streaming.md in the repository)
+    public static bool IsStreamingSupported { get; }
+    public StreamStartResponse RequestStream(Request request);
+    public StreamChunkResponse ReadStream(Guid streamId, int timeoutMs = 1000);
+    public Response ReadStreamAll(Guid streamId);
+    public DestroyResponse CancelStream(Guid streamId);
+
+    // WebSockets (see docs/websockets.md in the repository)
+    public static bool IsWebSocketSupported { get; }
+    public WsConnectResponse WsConnect(WsConnectRequest request);
+    public WsReadResponse WsRead(string connectionId, int timeoutMs = 1000);
+    public WsWriteResponse WsWrite(WsWriteRequest request);
+    public WsWriteResponse WsWriteText(string connectionId, string text, int timeoutMs = 0);
+    public WsWriteResponse WsWriteBinary(string connectionId, byte[] data, int timeoutMs = 0);
+    public DestroyResponse WsClose(string connectionId);
+    public WsStatsResponse WsStats(string connectionId);
+    // …plus an *Async variant of each
 }
 ```
 

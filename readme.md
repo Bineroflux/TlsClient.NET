@@ -129,6 +129,17 @@ examples, `Content-Type`-based branching, tuning knobs, and limitations.
 
 ---
 
+## 🔌 WebSockets
+
+`TlsClient.Native` opens WebSocket connections with the client profile's TLS
+fingerprint — through a `WsConnect` / `WsRead` / `WsWrite` / `WsClose` API on
+`NativeTlsClient`.
+
+See [docs/websockets.md](./docs/websockets.md) for the guide, including header
+rules, the read loop, and limitations.
+
+---
+
 ## 🧯 Support & Issues
 
 * Wrapper/packaging issues → open an issue **here**.

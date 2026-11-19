@@ -255,5 +255,207 @@ namespace TlsClient.Native
         public Task<Response> ReadStreamAllAsync(Guid streamId, CancellationToken ct = default) => AsyncHelpers.RunAsync(() => ReadStreamAll(streamId), ct);
         public Task<DestroyResponse> CancelStreamAsync(Guid streamId, CancellationToken ct = default) => AsyncHelpers.RunAsync(() => CancelStream(streamId), ct);
         #endregion
+
+        #region WebSockets
+        /// <summary>
+        /// Returns <c>true</c> when the loaded native library exposes the WebSocket exports.
+        /// Older builds may not — in which case the WebSocket methods on this client return
+        /// the error in <see cref="BaseResponse.Body"/>.
+        /// </summary>
+        public static bool IsWebSocketSupported => TlsClientWrapper.IsWebSocketSupported;
+
+        /// <summary>
+        /// Runs the WebSocket handshake and returns once it has completed or failed. Properties of
+        /// <paramref name="request"/> left unset are taken from this client's options (not its session:
+        /// see <see cref="WsConnectRequest.SessionId"/>). Use the returned
+        /// <see cref="WsConnectResponse.ConnectionId"/> for <see cref="WsRead"/>, <see cref="WsWrite"/>,
+        /// <see cref="WsClose"/> and <see cref="WsStats"/>.
+        /// </summary>
+        /// <remarks>
+        /// The native side keeps reading the connection in the background, so ping/pong and close
+        /// frames are answered while nobody is inside <see cref="WsRead"/>. Messages wait there, one at
+        /// a time, until collected. Always call <see cref="WsClose"/> when done.
+        /// </remarks>
+        public WsConnectResponse WsConnect(WsConnectRequest request)
+        {
+            request = PrepareWsConnect(request);
+
+            WsConnectResponse response;
+
+            try
+            {
+                using var payload = RequestHelpers.PreparePooled(request);
+                var rawResponse = TlsClientWrapper.WsConnect(payload.TerminatedSpan);
+                response = rawResponse.FromJson<WsConnectResponse>() ?? throw new Exception("Response is null, can't convert object from json.");
+            }
+            catch (Exception err)
+            {
+                response = new WsConnectResponse
+                {
+                    Body = err.Message,
+                    Status = 0,
+                };
+            }
+
+            if (!string.IsNullOrEmpty(response.Id))
+                TlsClientWrapper.FreeMemory(response.Id);
+
+            return response;
+        }
+
+        /// <summary>
+        /// Collects the next message of a connection. Inspect <see cref="WsReadResponse.Timeout"/> and
+        /// <see cref="WsReadResponse.Error"/> to drive the read loop.
+        /// </summary>
+        /// <param name="timeoutMs">
+        /// <c>0</c>: block the calling thread until a message arrives or the connection ends.
+        /// <c>&gt; 0</c>: block up to that many milliseconds, then return Timeout=true; the connection stays usable.
+        /// </param>
+        public WsReadResponse WsRead(string connectionId, int timeoutMs = 1000)
+        {
+            WsReadResponse response;
+
+            try
+            {
+                using var payload = RequestHelpers.PreparePooled(new WsReadRequest
+                {
+                    ConnectionId = connectionId,
+                    TimeoutMilliseconds = timeoutMs,
+                });
+                var rawResponse = TlsClientWrapper.WsRead(payload.TerminatedSpan);
+                response = rawResponse.FromJson<WsReadResponse>() ?? throw new Exception("Response is null, can't convert object from json.");
+            }
+            catch (Exception err)
+            {
+                response = new WsReadResponse
+                {
+                    ConnectionId = connectionId,
+                    Body = err.Message,
+                };
+            }
+
+            if (!string.IsNullOrEmpty(response.Id))
+                TlsClientWrapper.FreeMemory(response.Id);
+
+            return response;
+        }
+
+        /// <summary>
+        /// Sends one message. Safe to call while another thread is inside <see cref="WsRead"/> on the
+        /// same connection, and alongside other writes. A failed write closes the connection.
+        /// </summary>
+        public WsWriteResponse WsWrite(WsWriteRequest request)
+        {
+            if (request is null) throw new ArgumentNullException(nameof(request));
+
+            WsWriteResponse response;
+
+            try
+            {
+                using var payload = RequestHelpers.PreparePooled(request);
+                var rawResponse = TlsClientWrapper.WsWrite(payload.TerminatedSpan);
+                response = rawResponse.FromJson<WsWriteResponse>() ?? throw new Exception("Response is null, can't convert object from json.");
+            }
+            catch (Exception err)
+            {
+                response = new WsWriteResponse
+                {
+                    ConnectionId = request.ConnectionId,
+                    Body = err.Message,
+                    Success = false,
+                };
+            }
+
+            if (!string.IsNullOrEmpty(response.Id))
+                TlsClientWrapper.FreeMemory(response.Id);
+
+            return response;
+        }
+
+        /// <summary>Sends a text message. See <see cref="WsWrite(WsWriteRequest)"/>.</summary>
+        /// <param name="timeoutMs">Bounds how long the write may block; <c>0</c> = no deadline.</param>
+        public WsWriteResponse WsWriteText(string connectionId, string text, int timeoutMs = 0)
+            => WsWrite(new WsWriteRequest
+            {
+                ConnectionId = connectionId,
+                Data = text,
+                MessageType = WsMessageType.Text,
+                TimeoutMilliseconds = timeoutMs,
+            });
+
+        /// <summary>Sends a binary message. See <see cref="WsWrite(WsWriteRequest)"/>.</summary>
+        /// <param name="timeoutMs">Bounds how long the write may block; <c>0</c> = no deadline.</param>
+        public WsWriteResponse WsWriteBinary(string connectionId, byte[] data, int timeoutMs = 0)
+            => WsWrite(new WsWriteRequest
+            {
+                ConnectionId = connectionId,
+                Data = Convert.ToBase64String(data ?? throw new ArgumentNullException(nameof(data))),
+                MessageType = WsMessageType.Binary,
+                TimeoutMilliseconds = timeoutMs,
+            });
+
+        /// <summary>
+        /// Sends a close frame (always 1000; the native side takes no code) and releases the connection.
+        /// A <see cref="WsRead"/> blocked on it returns with an error. Returns Success=false when the
+        /// connection is already gone — after a read or write failure, or a close from the server — so
+        /// it is safe to call in a finally block.
+        /// </summary>
+        public DestroyResponse WsClose(string connectionId)
+        {
+            DestroyResponse response;
+
+            try
+            {
+                using var payload = RequestHelpers.PreparePooled(new WsCloseRequest { ConnectionId = connectionId });
+                var rawResponse = TlsClientWrapper.WsClose(payload.TerminatedSpan);
+                response = rawResponse.FromJson<DestroyResponse>() ?? throw new Exception("Response is null, can't convert object from json.");
+            }
+            catch (Exception err)
+            {
+                response = new DestroyResponse
+                {
+                    Body = err.Message,
+                    Success = false,
+                };
+            }
+
+            if (!string.IsNullOrEmpty(response.Id))
+                TlsClientWrapper.FreeMemory(response.Id);
+
+            return response;
+        }
+
+        /// <summary>Returns a diagnostic snapshot of a live connection; never touches the wire.</summary>
+        public WsStatsResponse WsStats(string connectionId)
+        {
+            WsStatsResponse response;
+
+            try
+            {
+                using var payload = RequestHelpers.PreparePooled(new WsStatsRequest { ConnectionId = connectionId });
+                var rawResponse = TlsClientWrapper.WsStats(payload.TerminatedSpan);
+                response = rawResponse.FromJson<WsStatsResponse>() ?? throw new Exception("Response is null, can't convert object from json.");
+            }
+            catch (Exception err)
+            {
+                response = new WsStatsResponse
+                {
+                    ConnectionId = connectionId,
+                    Body = err.Message,
+                };
+            }
+
+            if (!string.IsNullOrEmpty(response.Id))
+                TlsClientWrapper.FreeMemory(response.Id);
+
+            return response;
+        }
+
+        public Task<WsConnectResponse> WsConnectAsync(WsConnectRequest request, CancellationToken ct = default) => AsyncHelpers.RunAsync(() => WsConnect(request), ct);
+        public Task<WsReadResponse> WsReadAsync(string connectionId, int timeoutMs = 1000, CancellationToken ct = default) => AsyncHelpers.RunAsync(() => WsRead(connectionId, timeoutMs), ct);
+        public Task<WsWriteResponse> WsWriteAsync(WsWriteRequest request, CancellationToken ct = default) => AsyncHelpers.RunAsync(() => WsWrite(request), ct);
+        public Task<DestroyResponse> WsCloseAsync(string connectionId, CancellationToken ct = default) => AsyncHelpers.RunAsync(() => WsClose(connectionId), ct);
+        public Task<WsStatsResponse> WsStatsAsync(string connectionId, CancellationToken ct = default) => AsyncHelpers.RunAsync(() => WsStats(connectionId), ct);
+        #endregion
     }
 }
